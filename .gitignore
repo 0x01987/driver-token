@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+.next/
+artifacts/
+cache/
+typechain-types/
+coverage/
+dist/
