@@ -15,15 +15,16 @@ class UberTokenResponse:
 
 def uber_authorization_url(state: str) -> str:
     settings = get_settings()
-    query = urlencode(
-        {
-            "client_id": settings.uber_client_id,
-            "response_type": "code",
-            "redirect_uri": settings.uber_redirect_uri,
-            "scope": settings.uber_scopes,
-            "state": state,
-        }
-    )
+    params = {
+        "client_id": settings.uber_client_id,
+        "response_type": "code",
+        "redirect_uri": settings.uber_redirect_uri,
+        "state": state,
+    }
+    if settings.uber_scopes.strip():
+        params["scope"] = settings.uber_scopes
+
+    query = urlencode(params)
     return f"https://login.uber.com/oauth/v2/authorize?{query}"
 
 
