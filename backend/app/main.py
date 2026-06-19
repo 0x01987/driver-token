@@ -13,6 +13,7 @@ from app.db import Base, engine, get_db
 from app.models import Claim, ClaimStatus, DriverAccount, Ride, User, Wallet
 from app.security import create_access_token, hash_password, verify_password
 from app.uber import uber_authorization_url
+from app.config import get_settings
 
 app = FastAPI(title="Driver Token API")
 app.add_middleware(
@@ -88,7 +89,18 @@ def login(payload: AuthRequest, db: Session = Depends(get_db)) -> AuthResponse:
 
 
 @app.get("/oauth/uber/start")
-def start_uber_oauth(user_id: str = "demo") -> RedirectResponse:
+def start_uber_oauth(user_id: str = "demo") -> RedirectResponse | HTMLResponse:
+    settings = get_settings()
+    if settings.uber_client_id in {"", "testnet-placeholder", "replace-me"}:
+        return HTMLResponse(
+            (
+                "<h1>Uber connection is not configured</h1>"
+                "<p>Add a real Uber Developer Client ID and Client Secret in Render, "
+                "then redeploy the backend.</p>"
+            ),
+            status_code=503,
+        )
+
     state = f"{user_id}:{token_urlsafe(24)}"
     return RedirectResponse(uber_authorization_url(state), status_code=302)
 
