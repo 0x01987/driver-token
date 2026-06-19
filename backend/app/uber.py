@@ -47,3 +47,13 @@ async def exchange_uber_code(code: str) -> UberTokenResponse:
         refresh_token=payload["refresh_token"],
         scopes=payload.get("scope", settings.uber_scopes),
     )
+
+
+async def fetch_uber_profile(access_token: str) -> dict:
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(
+            "https://api.uber.com/v1/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        response.raise_for_status()
+        return response.json()

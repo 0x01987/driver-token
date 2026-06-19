@@ -9,11 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.claims import sign_claim
-from app.db import Base, engine, get_db
-from app.models import Claim, ClaimStatus, DriverAccount, Ride, User, Wallet
-from app.security import create_access_token, hash_password, verify_password
-from app.uber import uber_authorization_url
 from app.config import get_settings
+from app.db import Base, engine, get_db
+from app.models import Claim, ClaimStatus, DriverAccount, Platform, Ride, User, Wallet
+from app.security import create_access_token, encrypt_token, hash_password, verify_password
+from app.uber import exchange_uber_code, fetch_uber_profile, uber_authorization_url
 
 app = FastAPI(title="Driver Token API")
 app.add_middleware(
@@ -106,11 +106,67 @@ def start_uber_oauth(user_id: str = "demo"):
 
 
 @app.get("/oauth/uber/callback")
-def uber_callback(code: str | None = None, state: str | None = None, error: str | None = None) -> HTMLResponse:
+async def uber_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
     if error:
         return HTMLResponse(f"<h1>Uber connection failed</h1><p>{escape(error)}</p>", status_code=400)
     if not code:
         return HTMLResponse("<h1>Uber connection failed</h1><p>Missing OAuth code.</p>", status_code=400)
+    if not state or ":" not in state:
+        return HTMLResponse("<h1>Uber connection failed</h1><p>Invalid OAuth state.</p>", status_code=400)
+
+    user_id = state.split(":", 1)[0]
+    user = db.get(User, user_id)
+    if not user:
+        return HTMLResponse("<h1>Uber connection failed</h1><p>Driver account not found.</p>", status_code=404)
+
+    try:
+        token_response = await exchange_uber_code(code)
+        profile = await fetch_uber_profile(token_response.access_token)
+    except Exception:
+        return HTMLResponse(
+            "<h1>Uber connection failed</h1><p>Uber did not complete the account connection.</p>",
+            status_code=502,
+        )
+
+    external_driver_id = profile.get("uuid") or profile.get("driver_id") or profile.get("rider_id")
+    if not external_driver_id:
+        return HTMLResponse(
+            "<h1>Uber connection failed</h1><p>Uber profile did not include a driver identifier.</p>",
+            status_code=502,
+        )
+
+    driver_account = db.scalar(
+        select(DriverAccount)
+        .where(DriverAccount.platform == Platform.uber.value)
+        .where(DriverAccount.external_driver_id == external_driver_id)
+    )
+    if driver_account and driver_account.user_id != user.id:
+        return HTMLResponse(
+            "<h1>Uber connection failed</h1><p>This Uber account is already connected to another driver.</p>",
+            status_code=409,
+        )
+
+    if not driver_account:
+        driver_account = DriverAccount(
+            user_id=user.id,
+            platform=Platform.uber.value,
+            external_driver_id=external_driver_id,
+            encrypted_access_token=encrypt_token(token_response.access_token),
+            encrypted_refresh_token=encrypt_token(token_response.refresh_token),
+            scopes=token_response.scopes,
+        )
+        db.add(driver_account)
+    else:
+        driver_account.encrypted_access_token = encrypt_token(token_response.access_token)
+        driver_account.encrypted_refresh_token = encrypt_token(token_response.refresh_token)
+        driver_account.scopes = token_response.scopes
+
+    db.commit()
     return HTMLResponse(
         "<h1>Uber connected</h1><p>You can close this tab and return to Driver Token.</p>",
         status_code=200,
