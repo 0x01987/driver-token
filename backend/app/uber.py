@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from urllib.parse import urlencode
 
 import httpx
 
@@ -14,14 +15,16 @@ class UberTokenResponse:
 
 def uber_authorization_url(state: str) -> str:
     settings = get_settings()
-    return (
-        "https://login.uber.com/oauth/v2/authorize"
-        f"?client_id={settings.uber_client_id}"
-        f"&response_type=code"
-        f"&redirect_uri={settings.uber_redirect_uri}"
-        f"&scope={settings.uber_scopes}"
-        f"&state={state}"
+    query = urlencode(
+        {
+            "client_id": settings.uber_client_id,
+            "response_type": "code",
+            "redirect_uri": settings.uber_redirect_uri,
+            "scope": settings.uber_scopes,
+            "state": state,
+        }
     )
+    return f"https://login.uber.com/oauth/v2/authorize?{query}"
 
 
 async def exchange_uber_code(code: str) -> UberTokenResponse:

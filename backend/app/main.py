@@ -1,4 +1,8 @@
+from html import escape
+from secrets import token_urlsafe
+
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -6,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.claims import sign_claim
 from app.db import Base, engine, get_db
 from app.models import Claim, ClaimStatus, DriverAccount, Ride, Wallet
+from app.uber import uber_authorization_url
 
 app = FastAPI(title="Driver Token API")
 
@@ -32,6 +37,24 @@ def create_tables_for_mvp() -> None:
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
+
+
+@app.get("/oauth/uber/start")
+def start_uber_oauth(user_id: str = "demo") -> RedirectResponse:
+    state = f"{user_id}:{token_urlsafe(24)}"
+    return RedirectResponse(uber_authorization_url(state), status_code=302)
+
+
+@app.get("/oauth/uber/callback")
+def uber_callback(code: str | None = None, state: str | None = None, error: str | None = None) -> HTMLResponse:
+    if error:
+        return HTMLResponse(f"<h1>Uber connection failed</h1><p>{escape(error)}</p>", status_code=400)
+    if not code:
+        return HTMLResponse("<h1>Uber connection failed</h1><p>Missing OAuth code.</p>", status_code=400)
+    return HTMLResponse(
+        "<h1>Uber connected</h1><p>You can close this tab and return to Driver Token.</p>",
+        status_code=200,
+    )
 
 
 @app.post("/wallets")

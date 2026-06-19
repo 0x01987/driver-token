@@ -18,6 +18,9 @@ const claimableRides = [
 ];
 
 export default function Home() {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://driver-token-api.onrender.com";
+  const uberConnectUrl = `${apiUrl}/oauth/uber/start?user_id=demo`;
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -33,7 +36,7 @@ export default function Home() {
           <h1>Claim Center</h1>
           <div className="metric">
             <span className="muted">Uber</span>
-            <strong>Connected</strong>
+            <strong>Not connected</strong>
           </div>
           <div className="metric">
             <span className="muted">Wallet</span>
@@ -43,7 +46,9 @@ export default function Home() {
             <span className="muted">Claimable</span>
             <strong>20 DRIVE</strong>
           </div>
-          <button className="secondary">Connect Uber</button>
+          <a className="button-link secondary" href={uberConnectUrl}>
+            Connect Uber
+          </a>
         </aside>
 
         <section className="stack">

@@ -32,7 +32,19 @@ button {
   padding: 0 16px;
 }
 
-button.secondary {
+a.button-link {
+  align-items: center;
+  border-radius: 6px;
+  display: inline-flex;
+  font: inherit;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  text-decoration: none;
+}
+
+button.secondary,
+a.secondary {
   background: #e9eeeb;
   color: var(--foreground);
 }
