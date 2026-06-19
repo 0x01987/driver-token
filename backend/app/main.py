@@ -2,6 +2,7 @@ from html import escape
 from secrets import token_urlsafe
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -9,10 +10,18 @@ from sqlalchemy.orm import Session
 
 from app.claims import sign_claim
 from app.db import Base, engine, get_db
-from app.models import Claim, ClaimStatus, DriverAccount, Ride, Wallet
+from app.models import Claim, ClaimStatus, DriverAccount, Ride, User, Wallet
+from app.security import create_access_token, hash_password, verify_password
 from app.uber import uber_authorization_url
 
 app = FastAPI(title="Driver Token API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class ClaimProofResponse(BaseModel):
@@ -29,6 +38,18 @@ class WalletLinkRequest(BaseModel):
     address: str = Field(pattern=r"^0x[a-fA-F0-9]{40}$")
 
 
+class AuthRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8, max_length=128)
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    email: str
+
+
 @app.on_event("startup")
 def create_tables_for_mvp() -> None:
     Base.metadata.create_all(bind=engine)
@@ -37,6 +58,33 @@ def create_tables_for_mvp() -> None:
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
+
+
+@app.post("/auth/signup", response_model=AuthResponse)
+def signup(payload: AuthRequest, db: Session = Depends(get_db)) -> AuthResponse:
+    email = payload.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=422, detail="valid email is required")
+
+    existing = db.scalar(select(User).where(User.email == email))
+    if existing:
+        raise HTTPException(status_code=409, detail="account already exists")
+
+    user = User(email=email, password_hash=hash_password(payload.password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return AuthResponse(access_token=create_access_token(user.id), user_id=user.id, email=user.email)
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+def login(payload: AuthRequest, db: Session = Depends(get_db)) -> AuthResponse:
+    email = payload.email.strip().lower()
+    user = db.scalar(select(User).where(User.email == email))
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="invalid email or password")
+
+    return AuthResponse(access_token=create_access_token(user.id), user_id=user.id, email=user.email)
 
 
 @app.get("/oauth/uber/start")
