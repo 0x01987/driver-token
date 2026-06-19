@@ -89,7 +89,7 @@ def login(payload: AuthRequest, db: Session = Depends(get_db)) -> AuthResponse:
 
 
 @app.get("/oauth/uber/start")
-def start_uber_oauth(user_id: str = "demo") -> RedirectResponse | HTMLResponse:
+def start_uber_oauth(user_id: str = "demo"):
     settings = get_settings()
     if settings.uber_client_id in {"", "testnet-placeholder", "replace-me"}:
         return HTMLResponse(
